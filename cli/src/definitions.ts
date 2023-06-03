@@ -133,6 +133,7 @@ export interface Config {
   readonly cli: CLIConfig;
   readonly app: AppConfig;
   readonly plugins?: PluginsConfig;
+  readonly multiApp?: {isMulti:boolean, conf?: MultiAppConf};
 }
 
 export interface FrameworkConfig {
@@ -148,3 +149,5 @@ export interface FrameworkConfig {
    */
   priority: number;
 }
+
+export interface MultiAppConf {root: string, app: string, appRoot: string};

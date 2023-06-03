@@ -57,11 +57,15 @@ export function runProgram(config: Config): void {
       '--web-dir <value>',
       'Optional: Directory of your projects built web assets',
     )
+    .option(
+      '--multi-app',
+      'Optional: Should it be initialized in multi-app mode'
+    )
     .action(
       wrapAction(
-        telemetryAction(config, async (appName, appId, { webDir }) => {
+        telemetryAction(config, async (appName, appId, { webDir, multiApp }) => {
           const { initCommand } = await import('./tasks/init');
-          await initCommand(config, appName, appId, webDir);
+          await initCommand(config, appName, appId, webDir, multiApp);
         }),
       ),
     );

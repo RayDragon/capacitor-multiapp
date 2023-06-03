@@ -400,7 +400,7 @@ async function installLatestLibs(
   runInstall: boolean,
   config: Config,
 ) {
-  const pkgJsonPath = join(config.app.rootDir, 'package.json');
+  const pkgJsonPath = join(config.multiApp?.conf?.root ?? config.app.rootDir, 'package.json');
   const pkgJsonFile = readFile(pkgJsonPath);
   if (!pkgJsonFile) {
     return;

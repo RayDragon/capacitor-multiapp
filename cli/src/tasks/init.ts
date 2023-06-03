@@ -5,6 +5,7 @@ import c from '../colors';
 import { check, checkAppId, checkAppName, runTask } from '../common';
 import {
   CONFIG_FILE_NAME_JSON,
+  CONFIG_FILE_NAME_MULTI_JS,
   CONFIG_FILE_NAME_TS,
   writeConfig,
 } from '../config';
@@ -16,12 +17,15 @@ import { output, logSuccess, logPrompt } from '../log';
 import { readConfig, writeConfig as sysWriteConfig } from '../sysconfig';
 import { resolveNode } from '../util/node';
 import { checkInteractive, isInteractive } from '../util/term';
+import { readdir } from 'fs/promises';
+import { writeJSON, writeJSONSync } from '@ionic/utils-fs';
 
 export async function initCommand(
   config: Config,
   name: string,
   id: string,
   webDirFromCLI?: string,
+  multiApp?: string
 ): Promise<void> {
   try {
     if (!checkInteractive(name, id)) {
@@ -36,7 +40,14 @@ export async function initCommand(
           `Delete ${c.strong(config.app.extConfigName)} and try again.`,
       );
     }
-
+    if(multiApp) {
+      output.write("Initializing Multi App Mode");
+      const multiAppConf = await getMultiAppParams();
+      // console.log(multiAppConf);
+      writeJSONSync(CONFIG_FILE_NAME_MULTI_JS, multiAppConf);
+      output.write("Please re-run the init command to continue");
+      return ;
+    }
     const isNewConfig = Object.keys(config.app.extConfig).length === 0;
     const tsInstalled = !!resolveNode(config.app.rootDir, 'typescript');
     const appName = await getName(config, name);
@@ -208,4 +219,45 @@ async function promptToSignup(): Promise<boolean> {
     open(`http://ionicframework.com/signup?source=capacitor`);
   }
   return answers.create;
+}
+
+
+async function getMultiAppParams() {
+  const confirmContinue = {
+    ...(await logPrompt(
+      `Configuring Multi App`,
+      {
+        type: "confirm",
+        name :"addApp",
+        message: "Continue?",
+      }
+    )),
+  }.addApp;
+  if(!confirmContinue) return process.exit(0);
+  const rootPath = (await logPrompt("Enter Root path for apps", {type: "text", name: "appsPath", message: "path"})).appsPath;
+  const confirmScanApps = (await logPrompt("Scan for apps ?", {type: "confirm", name: "scanApps", message: "(y/n)"})).scanApps;
+  let appsSelectedToAdd = [];
+  let defaultAppValue = undefined;
+  if(confirmScanApps) {
+    const apps = (await readdir(rootPath, {withFileTypes: true})).filter(item=>item.isDirectory()).map(item=>item.name);
+    appsSelectedToAdd = (await logPrompt("Select Apps to add configurations to", {
+      type: "multiselect", 
+      choices: apps.map(app=>({title: app, value: app, disabled: false, selected: false, description :""}))
+      , name: "appSelectedToAdd",
+      message: "Select apps found in directory: "+rootPath
+    }))
+      .appSelectedToAdd;
+    
+    defaultAppValue = (await logPrompt("Select default app", {
+      type: "select",
+      choices: appsSelectedToAdd.map((app: string, index: number)=>({title: app, value: app, disabled: false, selected: index==0, description: ""})),
+      name: "defaultAppSelected",
+      message: "Select default app"
+    })).defaultAppSelected;
+  }
+  return {
+    rootPath,
+    apps: appsSelectedToAdd,
+    defaultApp: defaultAppValue
+  }
 }

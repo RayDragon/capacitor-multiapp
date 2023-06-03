@@ -145,7 +145,7 @@ async function generatePodFile(
   plugins: Plugin[],
 ): Promise<string> {
   const capacitoriOSPath = resolveNode(
-    config.app.rootDir,
+    config.multiApp?.conf?.root ?? config.app.rootDir,
     '@capacitor/ios',
     'package.json',
   );

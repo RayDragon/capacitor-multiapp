@@ -179,7 +179,7 @@ export async function installGradlePlugins(
   cordovaPlugins: Plugin[],
 ): Promise<void> {
   const capacitorAndroidPackagePath = resolveNode(
-    config.app.rootDir,
+    config.multiApp?.conf?.root ?? config.app.rootDir,
     '@capacitor/android',
     'package.json',
   );

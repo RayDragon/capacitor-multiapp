@@ -74,7 +74,7 @@ export async function resolvePlugin(
   name: string,
 ): Promise<Plugin | null> {
   try {
-    const packagePath = resolveNode(config.app.rootDir, name, 'package.json');
+    const packagePath = resolveNode(config.multiApp?.conf?.root ?? config.app.rootDir, name, 'package.json');
     if (!packagePath) {
       fatal(
         `Unable to find ${c.strong(`node_modules/${name}`)}.\n` +

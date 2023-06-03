@@ -5,8 +5,9 @@ import {
   writeFile,
   writeJSON,
 } from '@ionic/utils-fs';
+import {program} from "commander";
 import Debug from 'debug';
-import { dirname, extname, join, relative, resolve } from 'path';
+import path, { dirname, extname, join, relative, resolve } from 'path';
 
 import c from './colors';
 import type {
@@ -16,11 +17,12 @@ import type {
   Config,
   ExternalConfig,
   IOSConfig,
+  MultiAppConf,
   WebConfig,
 } from './definitions';
 import { OS } from './definitions';
 import { fatal, isFatal } from './errors';
-import { logger } from './log';
+import { logger, output } from './log';
 import { tryFn } from './util/fn';
 import { formatJSObject } from './util/js';
 import { requireTS, resolveNode } from './util/node';
@@ -32,29 +34,51 @@ const debug = Debug('capacitor:config');
 export const CONFIG_FILE_NAME_TS = 'capacitor.config.ts';
 export const CONFIG_FILE_NAME_JS = 'capacitor.config.js';
 export const CONFIG_FILE_NAME_JSON = 'capacitor.config.json';
+export const CONFIG_FILE_NAME_MULTI_JS = 'capacitor.config.multi.json';
 
 export async function loadConfig(): Promise<Config> {
-  const appRootDir = process.cwd();
+  let appRootDir = process.cwd();
   const cliRootDir = dirname(__dirname);
+  let multiApp: {
+    isMulti: boolean,
+    conf?: MultiAppConf
+  } = {
+    isMulti: false
+  }
+  const extConfigMultiFilePathJS = resolve(appRootDir, CONFIG_FILE_NAME_MULTI_JS);
+  
+  if(await pathExists(extConfigMultiFilePathJS)) {
+    output.write("Multi App mode detected\n");
+    multiApp = {
+      isMulti: true,
+      conf: await loadMultiAppConf(appRootDir, CONFIG_FILE_NAME_MULTI_JS)
+    };
+    if(multiApp.conf?.appRoot) {
+      appRootDir = multiApp.conf.appRoot;
+    } else return fatal("Cannot resolve multi-app : " + JSON.stringify(multiApp, null, 4));
+    output.write(`Working in : ${appRootDir}\n`);
+  }
+
   const conf = await loadExtConfig(appRootDir);
 
   const appId = conf.extConfig.appId ?? '';
   const appName = conf.extConfig.appName ?? '';
   const webDir = conf.extConfig.webDir ?? 'www';
   const cli = await loadCLIConfig(cliRootDir);
-
+  
   const config: Config = {
     android: await loadAndroidConfig(appRootDir, conf.extConfig, cli),
     ios: await loadIOSConfig(appRootDir, conf.extConfig),
     web: await loadWebConfig(appRootDir, webDir),
     cli,
+    multiApp,
     app: {
       rootDir: appRootDir,
       appId,
       appName,
       webDir,
       webDirAbs: resolve(appRootDir, webDir),
-      package: (await tryFn(readJSON, resolve(appRootDir, 'package.json'))) ?? {
+      package: (await tryFn(readJSON, resolve(multiApp?.conf?.root ?? appRootDir, 'package.json'))) ?? {
         name: appName,
         version: '1.0.0',
       },
@@ -77,7 +101,7 @@ export async function writeConfig(
       break;
     }
     case '.ts': {
-      await writeFile(extConfigFilePath, formatConfigTS(extConfig));
+      await writeFile(extConfigFilePath, formatConfigTS(extConfig as any));
       break;
     }
   }
@@ -140,6 +164,39 @@ async function loadExtConfigJS(
     };
   } catch (e: any) {
     fatal(`Parsing ${c.strong(extConfigName)} failed.\n\n${e.stack ?? e}`);
+  }
+}
+
+
+async function loadMultiAppConf(
+  rootDir: string,
+  extConfigFilePath: string
+): Promise<MultiAppConf> {
+  try {
+    // const multiConfig = require(extConfigFilePath);
+    const multiConfig : {defaultApp: string, apps: string[], rootPath: string} = (await tryFn(readJSON, extConfigFilePath)) ?? {
+      rootPath: "",
+      defaultApp: "",
+      apps: []
+    };
+    let appName = multiConfig.defaultApp;
+    if(appName === undefined && multiConfig.apps.length > 0) appName = multiConfig.apps[0];
+    
+    program
+      .option("--app <app-name>", "Multi App - app name");
+    // Find if app is provided in cmd args
+    const opts = program.opts();
+
+    if(opts.app) appName = opts.app; 
+
+    if(!appName) return fatal(`Default app / applist not mentioned, please re-init multiapp mode or delete file : ` + extConfigFilePath);
+    return {
+      root: process.cwd(),
+      appRoot: path.join(process.cwd(), multiConfig.rootPath, appName), 
+      app: appName
+    }
+  } catch (e: any) {
+    fatal(`Parsing failed.\n\n${e.stack ?? e}`);
   }
 }
 
